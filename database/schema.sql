@@ -1,14 +1,15 @@
 -- Bảng tham chiếu cho các Đơn vị cấp đơn (trước đây là CongTy)
-CREATE TABLE DonViCapDon (
-    DonViID INT PRIMARY KEY AUTO_INCREMENT,
-    TenDonVi VARCHAR(255) UNIQUE NOT NULL
+CREATE TABLE CTTV (
+    CTTVID INT PRIMARY KEY AUTO_INCREMENT,
+    TenCTTV VARCHAR(255) UNIQUE NOT NULL
 );
 
 -- Bảng tham chiếu cho các Sản phẩm (không đổi)
 CREATE TABLE SanPham (
     SanPhamID INT PRIMARY KEY AUTO_INCREMENT,
     MaSanPham VARCHAR(50) UNIQUE,
-    TenSanPham VARCHAR(50) UNIQUE NOT NULL
+    TenSanPham VARCHAR(50) UNIQUE NOT NULL,
+    BanCapDon VARCHAR(50) NOT NULL
 );
 
 -- Bảng tham chiếu cho Nhân viên (không đổi)
@@ -43,25 +44,33 @@ CREATE TABLE TinhTrangHoSo (
 CREATE TABLE HoSoBoiThuong (
     ID INT PRIMARY KEY AUTO_INCREMENT,
     SoHoSo VARCHAR(100) UNIQUE NOT NULL,
+    SoTheBaoHiem VARCHAR(255) NOT NULL ,
+    SoHopDongBaoHiem VARCHAR(255) NOT NULL ,
     NguoiDuocBaoHiem VARCHAR(255),
     KhachHang VARCHAR(255),
+    HLBH_tu DATE,
+    HLBH_den DATE,
     NgayRuiRo DATE,
     NgayNhanHoSo DATE,
     NgayBoiThuong DATE,
     SoTienYeuCau DECIMAL(18, 0) DEFAULT 0,
     SoTienBoiThuong DECIMAL(18, 0) DEFAULT 0,
     TinhTrangID INT,
-    LyDoGiaiQuyet TEXT,
+    LoaiBenhID INT,
+    MoTaNguyenNhan TEXT,
+    HauQua TEXT,
+    GiaiQuyet TEXT,
 
     -- Các cột khóa ngoại (Foreign Keys)
-    DonViID INT,
+    CTTVID INT,
     SanPhamID INT,
-    LoaiBenhID INT,
     CanBoBoiThuongID INT,
     NguoiDuyetID INT,
+    time_create TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    time_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     -- Thiết lập mối quan hệ giữa các bảng
-    CONSTRAINT fk_donvicapdon FOREIGN KEY (DonViID) REFERENCES DonViCapDon(DonViID),
+    CONSTRAINT fk_CTTV FOREIGN KEY (CTTVID) REFERENCES CTTV(CTTVID),
     CONSTRAINT fk_sanpham FOREIGN KEY (SanPhamID) REFERENCES SanPham(SanPhamID),
     CONSTRAINT fk_loaibenh FOREIGN KEY (LoaiBenhID) REFERENCES LoaiBenh(LoaiBenhID),
     CONSTRAINT fk_canbobt FOREIGN KEY (CanBoBoiThuongID) REFERENCES NhanVien(NhanVienID),

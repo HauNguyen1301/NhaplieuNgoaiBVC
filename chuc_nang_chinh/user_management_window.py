@@ -2,7 +2,7 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
 import sqlite3
-from database import execute_query, insert_data, update_data
+from database import database_manager as db_manager
 
 class UserManagementWindow(ttk.Toplevel):
     def __init__(self, parent):
@@ -33,14 +33,11 @@ class UserManagementWindow(ttk.Toplevel):
         add_button = ttk.Button(button_frame, text="Thêm mới", command=self.add_user, bootstyle=SUCCESS)
         add_button.pack(side='left', padx=(0, 5))
 
-
-        
         change_pass_button = ttk.Button(button_frame, text="Đổi mật khẩu", command=self.change_user_password, bootstyle=WARNING)
         change_pass_button.pack(side=LEFT, padx=5)
 
         change_role_button = ttk.Button(button_frame, text="Đổi vai trò", command=self.change_user_role, bootstyle=INFO)
         change_role_button.pack(side=LEFT)
-
 
         tree_frame = ttk.Frame(main_frame)
         tree_frame.pack(fill="both", expand=True)
@@ -48,14 +45,12 @@ class UserManagementWindow(ttk.Toplevel):
         columns = ("UserID", "Username", "Role", "HoTen", "HR_PhongBan")
         self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings")
         
-        # Define column headings
         self.tree.heading("UserID", text="User ID")
         self.tree.heading("Username", text="Tên đăng nhập")
         self.tree.heading("Role", text="Vai trò")
         self.tree.heading("HoTen", text="Họ và tên")
         self.tree.heading("HR_PhongBan", text="Phòng ban")
 
-        # Define column properties
         self.tree.column("UserID", width=80, anchor='center')
         self.tree.column("Username", width=150, anchor='center')
         self.tree.column("Role", width=100, anchor='center')
@@ -79,11 +74,11 @@ class UserManagementWindow(ttk.Toplevel):
                 LEFT JOIN NhanVien n ON u.NhanVienID = n.NhanVienID
                 ORDER BY u.UserID
             """
-            users = execute_query(query)
+            users = db_manager.fetch_all(query)
             
             if users:
+                self.all_users = users # Store for filtering
                 for user in users:
-                    # Replace None with empty string for better display
                     display_values = [v if v is not None else "" for v in user]
                     self.tree.insert("", "end", values=display_values)
         except Exception as e:
@@ -96,65 +91,22 @@ class UserManagementWindow(ttk.Toplevel):
         
         if hasattr(self, 'all_users'):
             for user in self.all_users:
-                if search_term in str(user[1]).lower(): # Search by username
-                    self.tree.insert("", "end", values=user)
+                # Search in username, HoTen, HR_PhongBan
+                if any(search_term in str(field).lower() for field in [user[1], user[3], user[4]]):
+                    self.tree.insert("", "end", values=[v if v is not None else "" for v in user])
 
     def get_selected_user(self):
         selected_item = self.tree.focus()
         if not selected_item:
-            messagebox.showwarning("Chưa chọn", "Vui lòng chọn một người dùng từ danh sách.", parent=self)
+            messagebox.showwarning("Lưu ý", "Vui lòng chọn một người dùng.", parent=self)
             return None
-        user_data = self.tree.item(selected_item)['values']
-        self.selected_user_label.config(text=f"Đã chọn: {user_data[1]}")
-        return user_data
+        return self.tree.item(selected_item, 'values')
 
     def add_user(self):
         add_window = ttk.Toplevel(self, "Thêm người dùng mới")
-        add_window.geometry("400x450")
+        add_window.geometry("500x450")
         add_window.transient(self)
         add_window.grab_set()
-
-        employee_map = {}
-
-        def load_departments_for_add_window():
-            try:
-                conn = sqlite3.connect('boithuong.db')
-                cursor = conn.cursor()
-                cursor.execute("SELECT DISTINCT HR_PhongBan FROM NhanVien WHERE HR_PhongBan IS NOT NULL ORDER BY HR_PhongBan")
-                departments = [row[0] for row in cursor.fetchall()]
-                conn.close()
-                department_combobox['values'] = departments
-                if departments:
-                    department_combobox.current(0)
-                    load_employees_for_add_window()
-            except Exception as e:
-                messagebox.showerror("Lỗi", f"Không thể tải danh sách phòng ban: {e}", parent=add_window)
-
-        def load_employees_for_add_window(event=None):
-            department = department_combobox.get()
-            if not department:
-                return
-            
-            try:
-                conn = sqlite3.connect('boithuong.db')
-                cursor = conn.cursor()
-                cursor.execute("SELECT NhanVienID, HoTen FROM NhanVien WHERE HR_PhongBan = ? ORDER BY HoTen", (department,))
-                employees = cursor.fetchall()
-                conn.close()
-                
-                employee_map.clear()
-                employee_combobox['values'] = []
-                
-                employee_names = []
-                for nhanvien_id, hoten in employees:
-                    employee_map[hoten] = nhanvien_id
-                    employee_names.append(hoten)
-                
-                employee_combobox['values'] = employee_names
-                if employee_names:
-                    employee_combobox.current(0)
-            except Exception as e:
-                messagebox.showerror("Lỗi", f"Không thể tải danh sách nhân viên: {e}", parent=add_window)
 
         ttk.Label(add_window, text="Tên đăng nhập:").pack(pady=(10, 0))
         username_entry = ttk.Entry(add_window)
@@ -172,11 +124,37 @@ class UserManagementWindow(ttk.Toplevel):
         ttk.Label(add_window, text="Phòng ban:").pack(pady=(10, 0))
         department_combobox = ttk.Combobox(add_window, state="readonly")
         department_combobox.pack(pady=5, padx=20, fill='x')
-        department_combobox.bind("<<ComboboxSelected>>", load_employees_for_add_window)
 
         ttk.Label(add_window, text="Nhân viên:").pack(pady=(10, 0))
         employee_combobox = ttk.Combobox(add_window, state="readonly")
         employee_combobox.pack(pady=5, padx=20, fill='x')
+
+        def load_departments_for_add_window():
+            try:
+                departments = db_manager.get_phong_bans()
+                if departments:
+                    department_combobox['values'] = [dept[0] for dept in departments]
+                    if departments:
+                        department_combobox.current(0)
+                    load_employees_for_add_window()
+            except Exception as e:
+                messagebox.showerror("Lỗi", f"Không thể tải danh sách phòng ban: {e}", parent=add_window)
+
+        def load_employees_for_add_window(event=None):
+            department = department_combobox.get()
+            if not department:
+                return
+            try:
+                employees = db_manager.get_can_bos_by_phong_ban(department)
+                employee_combobox['values'] = [emp[0] for emp in employees] if employees else []
+                if employees:
+                    employee_combobox.current(0)
+                else:
+                    employee_combobox.set('')
+            except Exception as e:
+                messagebox.showerror("Lỗi", f"Không thể tải danh sách nhân viên: {e}", parent=add_window)
+        
+        department_combobox.bind("<<ComboboxSelected>>", load_employees_for_add_window)
 
         def save_user():
             username = username_entry.get()
@@ -188,25 +166,22 @@ class UserManagementWindow(ttk.Toplevel):
                 messagebox.showerror("Lỗi", "Vui lòng nhập đầy đủ thông tin.", parent=add_window)
                 return
 
-            nhanvien_id = employee_map.get(employee_name)
-            if not nhanvien_id:
-                 messagebox.showerror("Lỗi", "Không tìm thấy ID cho nhân viên được chọn.", parent=add_window)
-                 return
-
             try:
-                new_user_id = insert_data("User", {
-                    "Username": username,
-                    "PasswordHash": password, # Note: Storing plain text passwords is not secure
-                    "Role": role,
-                    "NhanVienID": nhanvien_id
-                })
+                nhan_vien_id = db_manager.get_id_by_name('NhanVien', 'NhanVienID', 'HoTen', employee_name)
 
-                if new_user_id:
+                if not nhan_vien_id:
+                    messagebox.showerror("Lỗi", f"Không tìm thấy nhân viên '{employee_name}'.", parent=add_window)
+                    return
+
+                query = "INSERT INTO User (Username, Password, Role, NhanVienID) VALUES (?, ?, ?, ?)"
+                params = (username, password, role, nhan_vien_id)
+                
+                if db_manager.execute_query(query, params):
                     messagebox.showinfo("Thành công", "Thêm người dùng thành công.", parent=add_window)
                     add_window.destroy()
                     self.load_users()
                 else:
-                    messagebox.showerror("Lỗi", "Không thể thêm người dùng do lỗi không xác định.", parent=add_window)
+                    messagebox.showerror("Lỗi", "Thêm người dùng thất bại.", parent=add_window)
 
             except sqlite3.IntegrityError:
                 messagebox.showerror("Lỗi", f"Tên đăng nhập '{username}' đã tồn tại hoặc nhân viên đã có tài khoản.", parent=add_window)
@@ -250,10 +225,13 @@ class UserManagementWindow(ttk.Toplevel):
                 return
 
             try:
-                # Note: Storing plain text passwords is not secure
-                update_data("User", {"Password": new_pass}, f"UserID = {selected_user[0]}")
-                messagebox.showinfo("Thành công", "Đổi mật khẩu thành công.", parent=pass_window)
-                pass_window.destroy()
+                query = "UPDATE User SET Password = ? WHERE UserID = ?"
+                params = (new_pass, selected_user[0])
+                if db_manager.execute_query(query, params):
+                    messagebox.showinfo("Thành công", "Đổi mật khẩu thành công.", parent=pass_window)
+                    pass_window.destroy()
+                else:
+                    messagebox.showerror("Lỗi", "Đổi mật khẩu thất bại.", parent=pass_window)
             except Exception as e:
                 messagebox.showerror("Lỗi", f"Không thể đổi mật khẩu: {e}", parent=pass_window)
 
@@ -283,10 +261,14 @@ class UserManagementWindow(ttk.Toplevel):
                 return
 
             try:
-                update_data("User", {"Role": new_role}, f"UserID = {selected_user[0]}")
-                messagebox.showinfo("Thành công", "Đổi vai trò thành công.", parent=role_window)
-                role_window.destroy()
-                self.load_users()
+                query = "UPDATE User SET Role = ? WHERE UserID = ?"
+                params = (new_role, selected_user[0])
+                if db_manager.execute_query(query, params):
+                    messagebox.showinfo("Thành công", "Đổi vai trò thành công.", parent=role_window)
+                    role_window.destroy()
+                    self.load_users()
+                else:
+                    messagebox.showerror("Lỗi", "Đổi vai trò thất bại.", parent=role_window)
             except Exception as e:
                 messagebox.showerror("Lỗi", f"Không thể đổi vai trò: {e}", parent=role_window)
 

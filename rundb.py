@@ -1,9 +1,9 @@
 import sqlite3
 import os
 
-DB_FILE = "boithuong.db"
-SCHEMA_FILE = "schema.sql"
-DATA_FILE = "data.sql"
+DB_FILE = "database/boithuong.db"
+SCHEMA_FILE = "database/schema.sql"
+DATA_FILE = "database/data.sql"
 
 def create_database():
     # Delete the old database file if it exists
@@ -19,7 +19,7 @@ def create_database():
 
     # Read and execute the schema SQL file
     try:
-        with open(SCHEMA_FILE, 'r', encoding='utf-8') as f:
+        with open(SCHEMA_FILE, 'r', encoding='utf-8-sig') as f:
             schema_sql = f.read()
         # SQLite doesn't support AUTO_INCREMENT in the same way as MySQL.
         # INTEGER PRIMARY KEY is sufficient to create an auto-incrementing alias for rowid.
@@ -40,7 +40,7 @@ def create_database():
 
     # Read and execute the data SQL file
     try:
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+        with open(DATA_FILE, 'r', encoding='utf-8-sig') as f:
             data_sql = f.read()
         cursor.executescript(data_sql)
         print(f"Successfully inserted data from {DATA_FILE}")
