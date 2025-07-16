@@ -9,8 +9,9 @@ from ttkbootstrap.dialogs import Messagebox
 from database import database_manager as db_manager
 
 class NhapGycttFrame(ttkbootstrap.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, user_info):
         super().__init__(parent)
+        self.user_info = user_info
         self.create_widgets()
         self.load_initial_data()
 
@@ -312,10 +313,13 @@ class NhapGycttFrame(ttkbootstrap.Frame):
                 Messagebox.show_error(title="Lỗi dữ liệu", message="Không thể tìm thấy ID cho một trong các giá trị đã chọn. Vui lòng kiểm tra lại.", parent=self)
                 return
 
+            # Lấy UserID từ user_info
+            created_by_id = self.user_info[0]
+
             data_tuple = (
                 so_gyctt, ndbh, khach_hang, hlbh_tu.strftime('%Y-%m-%d'), hlbh_den.strftime('%Y-%m-%d'), 
                 ngay_rui_ro.strftime('%Y-%m-%d'), ngay_nhan_hs.strftime('%Y-%m-%d'), so_tien_yeu_cau, so_tien_boi_thuong, tinh_trang_id, loai_benh_id, 
-                mo_ta_nn, cttv_id, san_pham_id, can_bo_id, so_the_bh, so_hd_bh
+                mo_ta_nn, cttv_id, san_pham_id, can_bo_id, so_the_bh, so_hd_bh, created_by_id
             )
             
             if db_manager.insert_gyctt(data_tuple):

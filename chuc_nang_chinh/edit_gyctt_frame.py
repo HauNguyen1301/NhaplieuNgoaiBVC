@@ -99,7 +99,7 @@ class EditGYCTTFrame(ttkbootstrap.Frame):
         self.so_tien_yc_entry.bind('<FocusOut>', self.format_currency)
         self.so_tien_yc_entry.bind('<FocusIn>', self.unformat_currency)
 
-        ttk.Label(right_frame, text="Số tiền bồi thường:").grid(row=3, column=0, sticky="w", pady=5)
+        ttk.Label(right_frame, text="Số tiền ước bồi thường:").grid(row=3, column=0, sticky="w", pady=5)
         self.so_tien_bt_entry = ttk.Entry(right_frame)
         self.so_tien_bt_entry.grid(row=3, column=1, sticky="ew", pady=5)
         self.so_tien_bt_entry.bind('<FocusOut>', self.format_currency)
@@ -145,8 +145,9 @@ class EditGYCTTFrame(ttkbootstrap.Frame):
             return
         
         (hs_id, so_ho_so, ndbh, khach_hang, hlbh_tu, hlbh_den, ngay_rui_ro, ngay_nhan_hs, 
-         so_tien_yc, so_tien_bt, tinh_trang_id, loai_benh_id, mo_ta_nn, 
-         cttv_id, san_pham_id, can_bo_id, so_the_bh, so_hd_bh, time_create) = data
+         so_tien_yc, so_tien_bt, tinh_trang_id, loai_benh_id, mo_ta_nn,
+         cttv_id, san_pham_id, can_bo_id, so_the_bh, so_hd_bh, time_create,
+         _ngay_bt, _hau_qua, _giai_quyet, _nguoi_duyet_id) = data
 
         self.so_gyctt_entry.config(state='normal')
         self.so_gyctt_entry.delete(0, 'end')

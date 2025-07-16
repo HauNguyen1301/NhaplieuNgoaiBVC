@@ -5,8 +5,10 @@ from .edit_gyctt_frame import EditGYCTTFrame
 from .lap_to_trinh_frame import LapToTrinhFrame
 
 class ToTrinhBoiThuongFrame(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, parent_app):
         super().__init__(parent)
+        self.parent = parent
+        self.parent_app = parent_app
         self.create_widgets()
 
     def create_widgets(self):
@@ -57,7 +59,7 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
 
         self.tree.column('id', width=40, anchor='center')
         self.tree.column('so_ho_so', width=120, anchor='center')
-        self.tree.column('ten_ndbh', width=200)
+        self.tree.column('ten_ndbh', width=200, anchor='center')
         self.tree.column('san_pham', width=100, anchor='center')
         self.tree.column('tinh_trang', width=120, anchor='center')
 
@@ -74,7 +76,7 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
         ten_ndbh = self.ten_ndbh_entry.get().strip()
 
         if not so_ho_so and not ten_ndbh:
-            Messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập ít nhất một tiêu chí tìm kiếm.")
+            Messagebox.show_warning("Thiếu thông tin", "Vui lòng nhập ít nhất một tiêu chí tìm kiếm.")
             return
 
         results = db_manager.search_ho_so(so_ho_so=so_ho_so, ten_ndbh=ten_ndbh)
@@ -85,10 +87,14 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
 
         # Thêm kết quả mới
         if not results:
-            Messagebox.showinfo("Không tìm thấy", "Không tìm thấy hồ sơ nào phù hợp.")
+            Messagebox.show_info("Không tìm thấy", "Không tìm thấy hồ sơ nào phù hợp.")
         else:
             for row in results:
                 self.tree.insert('', 'end', values=row)
+
+        # Reset selection state after search
+        self.selected_hs_id = None
+        self.selected_info_label.config(text="Chưa chọn hồ sơ.")
 
     def setup_content_frame(self, parent_frame):
         self.selected_hs_id = None
@@ -103,6 +109,9 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
         create_trinh_button = ttk.Button(button_container, text="Lập tờ trình bồi thường", command=self.show_lap_to_trinh_panel, bootstyle="success")
         create_trinh_button.pack(side='left', padx=5)
 
+        self.selected_info_label = ttk.Label(button_container, text="Chưa chọn hồ sơ.", bootstyle="info")
+        self.selected_info_label.pack(side='left', padx=10)
+
         # Khung chính để hiển thị các panel con
         self.content_panel_container = ttk.Frame(parent_frame)
         self.content_panel_container.pack(fill='both', expand=True, padx=5, pady=5)
@@ -115,10 +124,14 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
         selected_items = self.tree.selection()
         if selected_items:
             selected_item = selected_items[0]
-            self.selected_hs_id = self.tree.item(selected_item, 'values')[0]
-            print(f"Selected HoSo ID: {self.selected_hs_id}") # Để debug
+            item_values = self.tree.item(selected_item, 'values')
+            self.selected_hs_id = item_values[0]
+            so_ho_so = item_values[1]
+            ten_ndbh = item_values[2]
+            self.selected_info_label.config(text=f"Đã chọn: {so_ho_so} - {ten_ndbh}")
         else:
             self.selected_hs_id = None
+            self.selected_info_label.config(text="Chưa chọn hồ sơ.")
 
     def clear_content_panel(self):
         for widget in self.content_panel_container.winfo_children():
@@ -126,7 +139,7 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
 
     def show_edit_gyctt_panel(self):
         if not self.selected_hs_id:
-            Messagebox.showwarning("Chưa chọn hồ sơ", "Vui lòng chọn một hồ sơ từ kết quả tìm kiếm.")
+            Messagebox.show_warning("Chưa chọn hồ sơ", "Vui lòng chọn một hồ sơ từ kết quả tìm kiếm.")
             return
         self.clear_content_panel()
         # Show new content
@@ -136,9 +149,22 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
 
     def show_lap_to_trinh_panel(self):
         if not self.selected_hs_id:
-            Messagebox.showwarning("Chưa chọn hồ sơ", "Vui lòng chọn một hồ sơ từ kết quả tìm kiếm.")
+            Messagebox.show_warning("Chưa chọn hồ sơ", "Vui lòng chọn một hồ sơ từ kết quả tìm kiếm.")
             return
+
         self.clear_content_panel()
-        # Show new content
-        lap_to_trinh_frame = LapToTrinhFrame(self.content_panel_container, self.selected_hs_id)
+
+        # Define the callback function to be executed on successful save
+        def on_save_callback():
+            # Clear the panel where the form was displayed
+            self.clear_content_panel()
+            # Re-run the search to refresh the treeview with updated data
+            self.perform_search()
+
+        lap_to_trinh_frame = LapToTrinhFrame(
+            self.content_panel_container,
+            self.selected_hs_id,
+            self.parent_app,
+            on_save_callback=on_save_callback
+        )
         lap_to_trinh_frame.pack(fill='both', expand=True)

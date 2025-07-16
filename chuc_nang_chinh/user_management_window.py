@@ -117,9 +117,9 @@ class UserManagementWindow(ttk.Toplevel):
         password_entry.pack(pady=5, padx=20, fill='x')
 
         ttk.Label(add_window, text="Vai trò:").pack(pady=(10, 0))
-        role_combobox = ttk.Combobox(add_window, values=["admin", "user"], state="readonly")
+        role_combobox = ttk.Combobox(add_window, values=["admin", "Leader","CBBT", "XacThuc"], state="readonly")
         role_combobox.pack(pady=5, padx=20, fill='x')
-        role_combobox.set("user")
+        role_combobox.set("CBBT")
 
         ttk.Label(add_window, text="Phòng ban:").pack(pady=(10, 0))
         department_combobox = ttk.Combobox(add_window, state="readonly")
@@ -173,7 +173,7 @@ class UserManagementWindow(ttk.Toplevel):
                     messagebox.showerror("Lỗi", f"Không tìm thấy nhân viên '{employee_name}'.", parent=add_window)
                     return
 
-                query = "INSERT INTO User (Username, Password, Role, NhanVienID) VALUES (?, ?, ?, ?)"
+                query = "INSERT INTO User (Username, PasswordHash, Role, NhanVienID) VALUES (?, ?, ?, ?)"
                 params = (username, password, role, nhan_vien_id)
                 
                 if db_manager.execute_query(query, params):
@@ -250,7 +250,7 @@ class UserManagementWindow(ttk.Toplevel):
         ttk.Label(role_window, text=f"Đổi vai trò cho {selected_user[1]}", font=("Arial", 12)).pack(pady=(10, 0))
 
         ttk.Label(role_window, text="Vai trò mới:").pack(pady=(10, 0))
-        role_combobox = ttk.Combobox(role_window, values=["admin", "user"], state="readonly")
+        role_combobox = ttk.Combobox(role_window, values=["admin", "Leader", "CBBT", "XacThuc"], state="readonly")
         role_combobox.set(selected_user[2])
         role_combobox.pack(pady=5, padx=20, fill='x')
 

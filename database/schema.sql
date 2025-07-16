@@ -1,12 +1,12 @@
 -- Bảng tham chiếu cho các Đơn vị cấp đơn (trước đây là CongTy)
 CREATE TABLE CTTV (
-    CTTVID INT PRIMARY KEY AUTO_INCREMENT,
+    CTTVID INTEGER PRIMARY KEY AUTOINCREMENT,
     TenCTTV VARCHAR(255) UNIQUE NOT NULL
 );
 
 -- Bảng tham chiếu cho các Sản phẩm (không đổi)
 CREATE TABLE SanPham (
-    SanPhamID INT PRIMARY KEY AUTO_INCREMENT,
+    SanPhamID INTEGER PRIMARY KEY AUTOINCREMENT,
     MaSanPham VARCHAR(50) UNIQUE,
     TenSanPham VARCHAR(50) UNIQUE NOT NULL,
     BanCapDon VARCHAR(50) NOT NULL
@@ -14,20 +14,20 @@ CREATE TABLE SanPham (
 
 -- Bảng tham chiếu cho Nhân viên (không đổi)
 CREATE TABLE NhanVien (
-    NhanVienID INT PRIMARY KEY AUTO_INCREMENT,
+    NhanVienID INTEGER PRIMARY KEY AUTOINCREMENT,
     HoTen VARCHAR(255) UNIQUE NOT NULL,
     HR_PhongBan VARCHAR(255)
 );
 
 -- Bảng mới: Nhóm Nguyên nhân chính
 CREATE TABLE NguyenNhan (
-    NguyenNhanID INT PRIMARY KEY AUTO_INCREMENT,
+    NguyenNhanID INTEGER PRIMARY KEY AUTOINCREMENT,
     TenNguyenNhan VARCHAR(255) UNIQUE NOT NULL
 );
 
 -- Bảng mới: Loại bệnh/Quyền lợi chi tiết
 CREATE TABLE LoaiBenh (
-    LoaiBenhID INT PRIMARY KEY AUTO_INCREMENT,
+    LoaiBenhID INTEGER PRIMARY KEY AUTOINCREMENT,
     MaLoaiBenh VARCHAR(20) UNIQUE, -- Mã như '1.1', '2.1'
     TenLoaiBenh VARCHAR(255) NOT NULL,
     NguyenNhanID INT, -- Khóa ngoại liên kết với bảng NguyenNhan
@@ -36,13 +36,13 @@ CREATE TABLE LoaiBenh (
 
 -- Bảng mới: Tình Trạng Hồ Sơ
 CREATE TABLE TinhTrangHoSo (
-    TinhTrangID INT PRIMARY KEY AUTO_INCREMENT,
+    TinhTrangID INTEGER PRIMARY KEY AUTOINCREMENT,
     TenTinhTrang VARCHAR(100) UNIQUE NOT NULL
 );
 
 -- Bảng chính HoSoBoiThuong (đã cập nhật)
 CREATE TABLE HoSoBoiThuong (
-    ID INT PRIMARY KEY AUTO_INCREMENT,
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
     SoHoSo VARCHAR(100) UNIQUE NOT NULL,
     SoTheBaoHiem VARCHAR(255) NOT NULL ,
     SoHopDongBaoHiem VARCHAR(255) NOT NULL ,
@@ -66,8 +66,9 @@ CREATE TABLE HoSoBoiThuong (
     SanPhamID INT,
     CanBoBoiThuongID INT,
     NguoiDuyetID INT,
-    time_create TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    time_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by INT, -- Thêm cột để lưu người tạo
+    time_create TIMESTAMP DEFAULT (datetime('now', '+7 hours')),
+    time_update TIMESTAMP DEFAULT (datetime('now', '+7 hours')),
 
     -- Thiết lập mối quan hệ giữa các bảng
     CONSTRAINT fk_CTTV FOREIGN KEY (CTTVID) REFERENCES CTTV(CTTVID),
@@ -75,7 +76,8 @@ CREATE TABLE HoSoBoiThuong (
     CONSTRAINT fk_loaibenh FOREIGN KEY (LoaiBenhID) REFERENCES LoaiBenh(LoaiBenhID),
     CONSTRAINT fk_canbobt FOREIGN KEY (CanBoBoiThuongID) REFERENCES NhanVien(NhanVienID),
     CONSTRAINT fk_nguoiduyet FOREIGN KEY (NguoiDuyetID) REFERENCES NhanVien(NhanVienID),
-    CONSTRAINT fk_tinhtrang FOREIGN KEY (TinhTrangID) REFERENCES TinhTrangHoSo(TinhTrangID)
+    CONSTRAINT fk_tinhtrang FOREIGN KEY (TinhTrangID) REFERENCES TinhTrangHoSo(TinhTrangID),
+    CONSTRAINT fk_created_by FOREIGN KEY (created_by) REFERENCES User(UserID) -- Thêm khóa ngoại
 );
 
 -- Tạo các chỉ mục (INDEX) cho bảng HoSoBoiThuong
@@ -103,6 +105,6 @@ CREATE TABLE system_audit_log (
     old_values TEXT,
     new_values TEXT,
     changed_by INTEGER,
-    changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    changed_at DATETIME DEFAULT (datetime('now', '+7 hours')),
     FOREIGN KEY (changed_by) REFERENCES User(UserID)
 );

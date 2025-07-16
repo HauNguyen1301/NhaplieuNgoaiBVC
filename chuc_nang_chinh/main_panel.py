@@ -11,7 +11,8 @@ from .quan_ly_so_lieu_frame import QuanLySoLieuFrame
 
 class MainPanel(ttk.Frame):
     def __init__(self, parent, user_info, logout_callback):
-        super().__init__(parent, padding="10")
+        super().__init__(parent)
+        self.parent = parent
         self.user_info = user_info
         self.logout_callback = logout_callback
         self.create_widgets()
@@ -50,16 +51,19 @@ class MainPanel(ttk.Frame):
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Create instances of the frames
-        nhap_gyctt_tab = NhapGycttFrame(notebook)
-        to_trinh_tab = ToTrinhBoiThuongFrame(notebook)
-        thong_ke_tab = ThongKeFrame(notebook)
-        quan_ly_tab = QuanLySoLieuFrame(notebook)
+        nhap_gyctt_tab = NhapGycttFrame(notebook, self.user_info)
+        to_trinh_tab = ToTrinhBoiThuongFrame(notebook, self.winfo_toplevel())
+        thong_ke_tab = ThongKeFrame(notebook, self.user_info)
 
         # Add frames to the notebook
         notebook.add(nhap_gyctt_tab, text="Nhập GYCTT")
         notebook.add(to_trinh_tab, text="Tờ trình bồi thường")
         notebook.add(thong_ke_tab, text="Thống kê")
-        notebook.add(quan_ly_tab, text="Quản lý số liệu")
+
+        # Add admin-only tabs
+        if self.user_info and self.user_info[3].lower() == 'admin':
+            quan_ly_tab = QuanLySoLieuFrame(notebook)
+            notebook.add(quan_ly_tab, text="Quản lý số liệu")
 
 
     def open_change_password_window(self):
