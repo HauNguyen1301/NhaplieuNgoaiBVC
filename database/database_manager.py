@@ -8,13 +8,11 @@ load_dotenv()
 def get_db_connection():
     """Tạo và trả về một kết nối đồng bộ đến cơ sở dữ liệu Turso."""
     url = os.getenv("TURSO_DATABASE_URL")
-    auth_token = os.getenv("TURSO_AUTH_TOKEN")
-    
+    auth_token = os.environ.get("TURSO_AUTH_TOKEN")
     if not url:
-        raise ValueError("TURSO_DATABASE_URL is not set in the environment variables.")
+        raise ValueError("TURSO_DATABASE_URL is not set in the environment.")
 
     # The sync client expects a file:, http:, or https: URL.
-    # We'll assume http for this conversion, but you might need to adjust.
     if url.startswith("wss://"):
         url = url.replace("wss://", "https://", 1)
     elif url.startswith("libsql://"):
@@ -28,8 +26,10 @@ def fetch_all(query, params=()):
     try:
         result_set = client.execute(query, params)
         return result_set.rows
-    except libsql_client.LibsqlError as e:
-        print(f"Lỗi cơ sở dữ liệu: {e}")
+    except Exception as e:
+        print(f"Lỗi khi thực thi truy vấn: {e}")
+        print(f"Truy vấn: {query}")
+        print(f"Tham số: {params}")
         return []
     finally:
         client.close()
@@ -160,7 +160,9 @@ def get_phong_ban_by_nhan_vien_id(nhan_vien_id):
     return result[0] if result else ""
 
 def get_id_by_name(table, id_column, name_column, name):
-    result = fetch_one(f"SELECT {id_column} FROM {table} WHERE {name_column} = ?", (name,))
+    query = f"SELECT {id_column} FROM {table} WHERE {name_column} = ?"
+    result = fetch_one(query, (name,))
+    # fetch_one trả về một tuple, ví dụ (3,). Cần trả về giá trị 3.
     return result[0] if result else None
 
 def insert_gyctt(data):
@@ -346,3 +348,66 @@ def update_to_trinh(hs_id, data_tuple):
     """
     full_data_tuple = data_tuple + (hs_id,)
     return execute_query(query, full_data_tuple)
+
+def search_ho_so_nang_cao(params):
+    base_query = """SELECT 
+            hs.SoHoSo, 
+            hs.NguoiDuocBaoHiem, 
+            sp.MaSanPham, 
+            hs.SoTienYeuCau, 
+            hs.SoTienBoiThuong, 
+            tths.TenTinhTrang, 
+            hs.NgayNhanHoSo, 
+            hs.NgayBoiThuong,
+            cb.HoTen
+        FROM HoSoBoiThuong hs
+        LEFT JOIN SanPham sp ON hs.SanPhamID = sp.SanPhamID
+        LEFT JOIN TinhTrangHoSo tths ON hs.TinhTrangID = tths.TinhTrangID
+        LEFT JOIN NhanVien cb ON hs.CanBoBoiThuongID = cb.NhanVienID
+        LEFT JOIN NhanVien pb ON cb.NhanVienID = pb.NhanVienID
+    """
+    base_query += ' '
+    conditions = []
+    query_params = []
+
+    # Lọc theo phòng ban
+    if params.get('phong_ban') and params['phong_ban'] != 'Tất cả':
+        conditions.append("pb.HR_PhongBan = ?")
+        query_params.append(params['phong_ban'])
+
+    # Lọc theo cán bộ
+    if params.get('can_bo') and params['can_bo'] != 'Tất cả':
+        conditions.append("cb.HoTen = ?")
+        query_params.append(params['can_bo'])
+
+    # Lọc theo tình trạng
+    if params.get('tinh_trang') and params['tinh_trang'] != 'Tất cả':
+        # Cần lấy TinhTrangID từ TenTinhTrang
+        tinh_trang_id = get_id_by_name('TinhTrangHoSo', 'TinhTrangID', 'TenTinhTrang', params['tinh_trang'])
+        if tinh_trang_id is not None:
+            conditions.append("hs.TinhTrangID = ?")
+            query_params.append(tinh_trang_id)
+
+    # Lọc theo ngày duyệt
+    if params.get('ngay_duyet_from') is not None:
+        conditions.append("date(hs.NgayBoiThuong) >= date(?)")
+        query_params.append(params['ngay_duyet_from'])
+    if params.get('ngay_duyet_to') is not None:
+        conditions.append("date(hs.NgayBoiThuong) <= date(?)")
+        query_params.append(params['ngay_duyet_to'])
+
+    # Lọc theo ngày nhận hồ sơ
+    if params.get('ngay_nhan_from') is not None:
+        conditions.append("date(hs.NgayNhanHoSo) >= date(?)")
+        query_params.append(params['ngay_nhan_from'])
+    if params.get('ngay_nhan_to') is not None:
+        conditions.append("date(hs.NgayNhanHoSo) <= date(?)")
+        query_params.append(params['ngay_nhan_to'])
+
+    if conditions:
+        base_query += " WHERE " + " AND ".join(conditions)
+
+    base_query += " ORDER BY hs.time_create DESC" # Added space here
+
+    return fetch_all(base_query, tuple(query_params))
+
