@@ -4,27 +4,32 @@ from datetime import datetime
 import ttkbootstrap
 from ttkbootstrap.constants import SUCCESS
 from ttkbootstrap.widgets import DateEntry
+import threading
 
 from ttkbootstrap.dialogs import Messagebox
 from database import database_manager as db_manager
 
-class NhapGycttFrame(ttkbootstrap.Frame):
+
+class NhapGycttFrame(ttk.Frame):
     def __init__(self, parent, user_info):
         super().__init__(parent)
         self.user_info = user_info
         self.create_widgets()
-        self.load_initial_data()
+        # Load data in a separate thread to avoid blocking the UI
+        threading.Thread(target=self.load_initial_data, daemon=True).start()
 
     def create_widgets(self):
+        content_frame = self
+
         # Main frames
-        left_frame = ttk.LabelFrame(self, text="Thông tin hồ sơ", padding=15)
+        left_frame = ttk.LabelFrame(content_frame, text="Thông tin hồ sơ", padding=15)
         left_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        right_frame = ttk.LabelFrame(self, text="Sự kiện bảo hiểm", padding=(10, 10))
+        right_frame = ttk.LabelFrame(content_frame, text="Sự kiện bảo hiểm", padding=(10, 10))
         right_frame.grid(row=0, column=1, padx=(0, 10), pady=10, sticky="nsew")
         
         # Configure grid weights for resizing
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
+        content_frame.grid_columnconfigure(0, weight=1)
+        content_frame.grid_columnconfigure(1, weight=1)
         left_frame.grid_columnconfigure(1, weight=1)
         right_frame.grid_columnconfigure(1, weight=1)
         right_frame.rowconfigure(4, weight=1) # Allow textarea to expand
@@ -32,13 +37,11 @@ class NhapGycttFrame(ttkbootstrap.Frame):
         # --- Left Frame Widgets ---
         ttk.Label(left_frame, text="Ban cấp đơn:").grid(row=0, column=0, sticky="w", pady=5)
         self.ban_var = tk.StringVar()
-        ban_options_frame = ttk.Frame(left_frame)
-        ban_options_frame.grid(row=0, column=1, sticky="w", pady=5)
-        bans = db_manager.get_ban_cap_dons()
-        for ban in bans:
-            ttk.Radiobutton(ban_options_frame, text=ban[0], variable=self.ban_var, value=ban[0], command=self.update_san_pham_dropdown).pack(side="left", padx=5)
-        if bans:
-            self.ban_var.set(bans[0][0])
+        self.ban_options_frame = ttk.Frame(left_frame)
+        self.ban_options_frame.grid(row=0, column=1, sticky="w", pady=5)
+        # Initially show a loading message
+        self.loading_bans_label = ttk.Label(self.ban_options_frame, text="Đang tải...")
+        self.loading_bans_label.pack(side="left", padx=5)
 
         ttk.Label(left_frame, text="Sản phẩm:").grid(row=1, column=0, sticky="w", pady=5)
         self.san_pham_combo = ttk.Combobox(left_frame, state="readonly")
@@ -121,7 +124,7 @@ class NhapGycttFrame(ttkbootstrap.Frame):
         self.can_bo_gq_combo.grid(row=8, column=1, sticky="ew", pady=5)
         
         # --- Bottom Buttons ---
-        button_frame = ttk.Frame(self)
+        button_frame = ttk.Frame(content_frame)
         button_frame.grid(row=1, column=0, columnspan=2, pady=10)
 
         save_button = ttk.Button(button_frame, text="Lưu", command=self.save_data, bootstyle="success")
@@ -131,11 +134,49 @@ class NhapGycttFrame(ttkbootstrap.Frame):
         clear_button.pack(side="left", padx=10)
 
     def load_initial_data(self):
-        """Tải tất cả dữ liệu ban đầu cho các combobox và đặt giá trị mặc định."""
-        self.update_san_pham_dropdown() # Phụ thuộc vào radio button Ban
-        self.load_phong_ban_dropdown()  # Tải và kích hoạt load cán bộ
-        self.load_loai_benh_dropdown()
-        self.load_tinh_trang_dropdown()
+        """Tải tất cả dữ liệu ban đầu trong một thread riêng biệt."""
+        try:
+            # Fetch all data in one go
+            bans = db_manager.get_ban_cap_dons()
+            cttvs = db_manager.get_cttvs()
+            phong_bans = db_manager.get_phong_bans()
+            loai_benhs = db_manager.get_loai_benhs()
+            tinh_trangs = db_manager.get_tinh_trang_ho_so()
+
+            # Schedule UI updates on the main thread
+            self.after(0, self.populate_ui, bans, cttvs, phong_bans, loai_benhs, tinh_trangs)
+        except Exception as e:
+            print(f"Lỗi khi tải dữ liệu ban đầu: {e}")
+            self.after(0, self.show_loading_error)
+
+    def show_loading_error(self):
+        self.loading_bans_label.config(text="Lỗi tải dữ liệu")
+        # You can also show a messagebox or disable the form
+
+    def populate_ui(self, bans, cttvs, phong_bans, loai_benhs, tinh_trangs):
+        """Điền dữ liệu vào các widget UI sau khi đã tải xong."""
+        # Populate Ban cap don radio buttons
+        self.loading_bans_label.destroy()
+        for ban in bans:
+            ttk.Radiobutton(self.ban_options_frame, text=ban[0], variable=self.ban_var, value=ban[0], command=self.update_san_pham_dropdown).pack(side="left", padx=5)
+        if bans:
+            self.ban_var.set(bans[0][0])
+
+        # Populate other comboboxes
+        self.cttv_combo['values'] = [cttv[0] for cttv in cttvs]
+        self.phong_gq_combo['values'] = [pb[0] for pb in phong_bans]
+        self.loai_benh_combo['values'] = [lb[0] for lb in loai_benhs]
+        self.tinh_trang_combo['values'] = [tt[0] for tt in tinh_trangs]
+
+        # Set default values if lists are not empty
+        if cttvs: self.cttv_combo.set(cttvs[0][0])
+        if phong_bans: self.phong_gq_combo.set(phong_bans[0][0])
+        if loai_benhs: self.loai_benh_combo.set(loai_benhs[0][0])
+        if tinh_trangs: self.tinh_trang_combo.set(tinh_trangs[0][0])
+
+        # Trigger dependent dropdown updates
+        self.update_san_pham_dropdown()
+        self.update_can_bo_dropdown()
         self.load_cttv_dropdown()
 
     def load_cttv_dropdown(self):
@@ -145,54 +186,44 @@ class NhapGycttFrame(ttkbootstrap.Frame):
         if cttv_list:
             self.cttv_combo.current(0)
 
-    def load_phong_ban_dropdown(self):
-        phong_bans = db_manager.get_phong_bans()
-        phong_ban_list = [pb[0] for pb in phong_bans] if phong_bans else []
-        self.phong_gq_combo['values'] = phong_ban_list
-        if phong_ban_list:
-            self.phong_gq_combo.current(0)
-            self.update_can_bo_dropdown() # Kích hoạt load cán bộ ngay sau khi có phòng ban
-
     def update_can_bo_dropdown(self, event=None):
         selected_phong_ban = self.phong_gq_combo.get()
         if selected_phong_ban:
-            can_bos = db_manager.get_can_bos_by_phong_ban(selected_phong_ban)
-            can_bo_list = [cb[0] for cb in can_bos] if can_bos else []
-            self.can_bo_gq_combo['values'] = can_bo_list
-            if can_bo_list:
-                self.can_bo_gq_combo.current(0)
+            # This still needs to be dynamic, so we can fetch it on demand
+            # or pre-fetch all possible can_bos if the list is small.
+            # For now, let's fetch it in a thread to avoid blocking on change.
+            threading.Thread(target=self._load_can_bos, args=(selected_phong_ban,), daemon=True).start()
+
+    def _load_can_bos(self, phong_ban):
+        can_bos = db_manager.get_can_bos_by_phong_ban(phong_ban)
+        self.after(0, self._populate_can_bos, can_bos)
+
+    def _populate_can_bos(self, can_bos):
+        self.can_bo_gq_combo['values'] = [cb[0] for cb in can_bos]
+        if can_bos:
+            self.can_bo_gq_combo.set(can_bos[0][0])
         else:
-            self.can_bo_gq_combo['values'] = []
             self.can_bo_gq_combo.set('')
 
-    def load_loai_benh_dropdown(self):
-        loai_benhs = db_manager.get_loai_benhs()
-        loai_benh_list = [lb[0] for lb in loai_benhs] if loai_benhs else []
-        self.loai_benh_combo['values'] = loai_benh_list
-        if loai_benh_list:
-            self.loai_benh_combo.current(0)
-
-    def load_tinh_trang_dropdown(self):
-        tinh_trangs = db_manager.get_tinh_trang_ho_so()
-        tinh_trang_list = [tt[0] for tt in tinh_trangs] if tinh_trangs else []
-        self.tinh_trang_combo['values'] = tinh_trang_list
-        if tinh_trang_list:
-            self.tinh_trang_combo.current(0)
-
     def update_san_pham_dropdown(self, event=None):
-        ban_cap_don = self.ban_var.get()
-        if ban_cap_don:
-            san_phams = db_manager.get_san_phams_by_ban(ban_cap_don)
-            san_pham_list = [sp[0] for sp in san_phams] if san_phams else []
-            self.san_pham_combo['values'] = san_pham_list
-            if san_pham_list:
-                self.san_pham_combo.config(state="readonly")
-                self.san_pham_combo.current(0)
-            else:
-                self.san_pham_combo.set('')
-                self.san_pham_combo.config(state="disabled")
+        selected_ban = self.ban_var.get()
+        if selected_ban:
+            self.san_pham_combo.set('Đang tải...')
+            threading.Thread(target=self._load_san_phams, args=(selected_ban,), daemon=True).start()
         else:
             self.san_pham_combo['values'] = []
+            self.san_pham_combo.set('')
+
+    def _load_san_phams(self, ban_cap_don):
+        san_phams = db_manager.get_san_phams_by_ban(ban_cap_don)
+        self.after(0, self._populate_san_phams, san_phams)
+
+    def _populate_san_phams(self, san_phams):
+        formatted_values = [f"{sp[0]} - {sp[1]}" for sp in san_phams]
+        self.san_pham_combo['values'] = formatted_values
+        if formatted_values:
+            self.san_pham_combo.set(formatted_values[0])
+        else:
             self.san_pham_combo.set('')
             self.san_pham_combo.config(state="disabled")
 

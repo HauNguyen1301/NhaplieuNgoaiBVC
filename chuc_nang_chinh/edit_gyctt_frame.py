@@ -5,35 +5,42 @@ import ttkbootstrap
 from ttkbootstrap.constants import SUCCESS
 from ttkbootstrap.widgets import DateEntry
 from ttkbootstrap.scrolled import ScrolledFrame
+import threading
 
 from ttkbootstrap.dialogs import Messagebox
 from database import database_manager as db_manager
 
-class EditGYCTTFrame(ttkbootstrap.Frame):
+
+class EditGYCTTFrame(ttk.Frame):
     def __init__(self, parent, hs_id, on_save_callback=None):
         super().__init__(parent)
         self.hs_id = hs_id
         self.on_save_callback = on_save_callback
         self.create_widgets()
-        self.load_initial_data()
-        self.load_data()
+
+        # Show loading indicator and load data in a background thread
+        self.show_loading_indicator()
+        threading.Thread(target=self._load_data_in_background, daemon=True).start()
 
     def create_widgets(self):
+        content_frame = self
+
         # --- Main Layout ---
         # Frame for buttons, placed at the bottom
-        button_frame = ttk.Frame(self)
+        button_frame = ttk.Frame(content_frame)
         button_frame.pack(side='bottom', fill='x', padx=10, pady=10)
 
         # ScrolledFrame for the main content, placed above the buttons
-        scroll_frame = ScrolledFrame(self, autohide=True)
-        scroll_frame.pack(side='top', fill='both', expand=True, padx=10, pady=(10, 0))
+        self.scroll_frame = ScrolledFrame(content_frame, autohide=True)
+        self.scroll_frame.pack(side='top', fill='both', expand=True, padx=10, pady=(10, 0))
 
         # Use a PanedWindow to ensure two frames have equal width
-        paned_window = ttk.PanedWindow(scroll_frame, orient='horizontal')
+        paned_window = ttk.PanedWindow(self.scroll_frame, orient='horizontal')
         paned_window.pack(fill='both', expand=True)
 
         # Main frames for content, placed inside the PanedWindow
         left_frame = ttk.LabelFrame(paned_window, text="Thông tin hồ sơ", padding=15)
+        self.paned_window = paned_window
         paned_window.add(left_frame, weight=1) # weight=1 ensures equal distribution
         
         right_frame = ttk.LabelFrame(paned_window, text="Sự kiện bảo hiểm", padding=15)
@@ -130,74 +137,129 @@ class EditGYCTTFrame(ttkbootstrap.Frame):
         save_button = ttk.Button(button_frame, text="Lưu thay đổi", command=self.save_changes, bootstyle=SUCCESS)
         save_button.pack(side="right")
 
-    def load_initial_data(self):
-        self.load_ban_dropdown()
-        self.load_cttv_dropdown()
-        self.load_phong_ban_dropdown()
-        self.update_can_bo_dropdown() # Load initial list
-        self.load_loai_benh_dropdown()
-        self.load_tinh_trang_dropdown()
+    def show_loading_indicator(self):
+        self.loading_label = ttk.Label(self.scroll_frame, text="Đang tải dữ liệu, vui lòng chờ...", font=("Helvetica", 12))
+        self.loading_label.pack(pady=50)
+
+    def _load_data_in_background(self):
+        try:
+            # Fetch all data in the background
+            self._ho_so_data = db_manager.get_ho_so_for_editing(self.hs_id)
+            self._ban_list = [b[0] for b in db_manager.get_ban_cap_dons()]
+            self._cttv_list = [c[0] for c in db_manager.get_cttvs()]
+            self._phong_ban_list = [p[0] for p in db_manager.get_phong_bans()]
+            self._loai_benh_list = [lb[0] for lb in db_manager.get_loai_benhs()]
+            self._tinh_trang_list = [tt[0] for tt in db_manager.get_tinh_trang_ho_so()]
+
+            # Schedule UI update on the main thread
+            self.after(0, self._populate_ui)
+        except Exception as e:
+            self.after(0, lambda: Messagebox.show_error(f"Lỗi tải dữ liệu: {e}", "Lỗi"))
+
+    def _populate_ui(self):
+        # Remove loading indicator
+        self.loading_label.destroy()
+
+        # Populate dropdowns first
+        self.ban_combo['values'] = self._ban_list
+        self.cttv_combo['values'] = self._cttv_list
+        self.phong_gq_combo['values'] = self._phong_ban_list
+        self.loai_benh_combo['values'] = self._loai_benh_list
+        self.tinh_trang_combo['values'] = self._tinh_trang_list
+
+        # Now populate the form with the fetched data
+        # Now populate the form with the fetched data
+        self.load_data()
 
     def load_data(self):
-        data = db_manager.get_ho_so_by_id(self.hs_id)
-        if not data:
-            Messagebox.show_error("Lỗi", f"Không tìm thấy hồ sơ với ID {self.hs_id}")
+        # Ensure data is not empty and is in the expected format (list of tuples)
+        if not self._ho_so_data or not isinstance(self._ho_so_data, (list, tuple)) or not self._ho_so_data[0]:
+            Messagebox.show_error("Không tìm thấy dữ liệu hồ sơ hoặc định dạng không hợp lệ.", "Lỗi dữ liệu")
+            self.paned_window.pack_forget()
             return
-        
-        (hs_id, so_ho_so, ndbh, khach_hang, hlbh_tu, hlbh_den, ngay_rui_ro, ngay_nhan_hs, 
-         so_tien_yc, so_tien_bt, tinh_trang_id, loai_benh_id, mo_ta_nn,
-         cttv_id, san_pham_id, can_bo_id, so_the_bh, so_hd_bh, time_create,
-         _ngay_bt, _hau_qua, _giai_quyet, _nguoi_duyet_id) = data
 
-        self.so_gyctt_entry.config(state='normal')
-        self.so_gyctt_entry.delete(0, 'end')
-        self.so_gyctt_entry.insert(0, so_ho_so or "")
-        self.so_gyctt_entry.config(state='readonly')
+        data = self._ho_so_data[0]  # Get the first record
 
-        self.ndbh_entry.delete(0, 'end'); self.ndbh_entry.insert(0, ndbh or "")
-        self.khach_hang_entry.delete(0, 'end'); self.khach_hang_entry.insert(0, khach_hang or "")
-        self.so_the_entry.delete(0, 'end'); self.so_the_entry.insert(0, so_the_bh or "")
-        self.so_hd_entry.delete(0, 'end'); self.so_hd_entry.insert(0, so_hd_bh or "")
-        self.so_tien_yc_entry.delete(0, 'end'); self.so_tien_yc_entry.insert(0, f"{so_tien_yc:,.0f}" if so_tien_yc is not None else "")
-        self.so_tien_bt_entry.delete(0, 'end'); self.so_tien_bt_entry.insert(0, f"{so_tien_bt:,.0f}" if so_tien_bt is not None else "")
-        self.mo_ta_nn_text.delete('1.0', 'end'); self.mo_ta_nn_text.insert('1.0', mo_ta_nn or "")
+        # Check if the record has the correct number of fields
+        if len(data) != 17:
+            Messagebox.show_error(f"Dữ liệu hồ sơ không đầy đủ. Mong đợi 17 trường nhưng nhận được {len(data)}.",
+                                "Lỗi cấu trúc dữ liệu")
+            self.paned_window.pack_forget()
+            return
 
-        def set_date_if_exists(date_entry, date_str):
-            if date_str:
-                try:
-                    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                    date_entry.entry.delete(0, 'end')
-                    date_entry.entry.insert(0, date_obj.strftime('%d/%m/%Y'))
-                except (ValueError, TclError):
-                    pass
+        try:
+            # Unpack data
+            (
+                so_gyctt, ndbh, khach_hang, hlbh_tu, hlbh_den, ngay_rui_ro, ngay_nhan_hs,
+                so_tien_yeu_cau, so_tien_boi_thuong, tinh_trang_id, loai_benh_id,
+                mo_ta_nn, cttv_id, san_pham_id, can_bo_id, so_the, so_hd
+            ) = data
 
-        set_date_if_exists(self.hlbh_tu_entry, hlbh_tu)
-        set_date_if_exists(self.hlbh_den_entry, hlbh_den)
-        set_date_if_exists(self.ngay_nhan_hs_entry, ngay_nhan_hs)
-        set_date_if_exists(self.ngay_rui_ro_entry, ngay_rui_ro)
+            def set_date_if_exists(date_entry, date_str):
+                if date_str:
+                    try:
+                        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                        date_entry.entry.delete(0, 'end')
+                        date_entry.entry.insert(0, date_obj.strftime('%d/%m/%Y'))
+                    except (ValueError, TypeError):
+                        pass  # Ignore if date is invalid or None
 
-        cttv_name = db_manager.get_name_by_id('CTTV', 'TenCTTV', 'CTTVID', cttv_id)
-        self.cttv_combo.set(cttv_name or "")
+            # Populate simple entry fields
+            self.so_gyctt_entry.config(state='normal')
+            self.so_gyctt_entry.delete(0, 'end')
+            self.so_gyctt_entry.insert(0, so_gyctt or '')
+            self.so_gyctt_entry.config(state='readonly')
 
-        ban_name = db_manager.get_ban_name_by_san_pham_id(san_pham_id)
-        if ban_name:
-            self.ban_combo.set(ban_name)
-            self.update_san_pham_dropdown()
-            san_pham_name = db_manager.get_name_by_id('SanPham', 'TenSanPham', 'SanPhamID', san_pham_id)
-            self.san_pham_combo.set(san_pham_name or "")
+            self.ndbh_entry.delete(0, 'end')
+            self.ndbh_entry.insert(0, ndbh or '')
+            self.khach_hang_entry.delete(0, 'end')
+            self.khach_hang_entry.insert(0, khach_hang or '')
+            self.so_the_entry.delete(0, 'end')
+            self.so_the_entry.insert(0, so_the or '')
+            self.so_hd_entry.delete(0, 'end')
+            self.so_hd_entry.insert(0, so_hd or '')
 
-        phong_ban_name = db_manager.get_phong_ban_by_nhan_vien_id(can_bo_id)
-        if phong_ban_name:
-            self.phong_gq_combo.set(phong_ban_name)
-            self.update_can_bo_dropdown()
-            can_bo_name = db_manager.get_name_by_id('NhanVien', 'HoTen', 'NhanVienID', can_bo_id)
-            self.can_bo_gq_combo.set(can_bo_name or "")
-        
-        loai_benh_name = db_manager.get_name_by_id('LoaiBenh', 'TenLoaiBenh', 'LoaiBenhID', loai_benh_id)
-        self.loai_benh_combo.set(loai_benh_name or "")
+            set_date_if_exists(self.hlbh_tu_entry, hlbh_tu)
+            set_date_if_exists(self.hlbh_den_entry, hlbh_den)
+            set_date_if_exists(self.ngay_rui_ro_entry, ngay_rui_ro)
+            set_date_if_exists(self.ngay_nhan_hs_entry, ngay_nhan_hs)
 
-        tinh_trang_name = db_manager.get_name_by_id('TinhTrangHoSo', 'TenTinhTrang', 'TinhTrangID', tinh_trang_id)
-        self.tinh_trang_combo.set(tinh_trang_name or "")
+            self.so_tien_yc_entry.delete(0, 'end')
+            self.so_tien_yc_entry.insert(0, f"{so_tien_yeu_cau:,.0f}" if so_tien_yeu_cau is not None else '')
+            self.so_tien_bt_entry.delete(0, 'end')
+            self.so_tien_bt_entry.insert(0, f"{so_tien_boi_thuong:,.0f}" if so_tien_boi_thuong is not None else '')
+
+            self.mo_ta_nn_text.delete('1.0', 'end')
+            self.mo_ta_nn_text.insert('1.0', mo_ta_nn or '')
+
+            # Populate comboboxes by finding the name from ID
+            cttv_name = db_manager.get_name_by_id('CTTV', 'TenCTTV', 'CTTVID', cttv_id)
+            self.cttv_combo.set(cttv_name or '')
+
+            tinh_trang_name = db_manager.get_name_by_id('TinhTrangHoSo', 'TenTinhTrang', 'TinhTrangID', tinh_trang_id)
+            self.tinh_trang_combo.set(tinh_trang_name or '')
+
+            loai_benh_name = db_manager.get_name_by_id('LoaiBenh', 'TenLoaiBenh', 'LoaiBenhID', loai_benh_id)
+            self.loai_benh_combo.set(loai_benh_name or '')
+
+            # For nested dropdowns, we need to set the parent first, then trigger the update, then set the child
+            ban_name = db_manager.get_ban_name_by_san_pham_id(san_pham_id)
+            if ban_name:
+                self.ban_combo.set(ban_name)
+                self.update_san_pham_dropdown()  # This will populate the san_pham_combo
+                san_pham_name = db_manager.get_name_by_id('SanPham', 'TenSanPham', 'SanPhamID', san_pham_id)
+                self.san_pham_combo.set(san_pham_name or '')
+
+            phong_ban_name = db_manager.get_phong_ban_by_nhan_vien_id(can_bo_id)
+            if phong_ban_name:
+                self.phong_gq_combo.set(phong_ban_name)
+                self.update_can_bo_dropdown()  # This will populate the can_bo_gq_combo
+                can_bo_name = db_manager.get_name_by_id('NhanVien', 'HoTen', 'NhanVienID', can_bo_id)
+                self.can_bo_gq_combo.set(can_bo_name or '')
+
+        except (ValueError, IndexError) as e:
+            Messagebox.show_error(f"Không thể xử lý dữ liệu hồ sơ: {e}", "Lỗi dữ liệu")
+            self.paned_window.pack_forget()
 
     def _validate_date(self, date_str):
         try:
@@ -273,13 +335,7 @@ class EditGYCTTFrame(ttkbootstrap.Frame):
         except Exception as e:
             Messagebox.show_error("Lỗi không xác định", f"Đã xảy ra lỗi khi lưu: {e}")
 
-    def load_cttv_dropdown(self):
-        cttv_list = [c[0] for c in db_manager.get_cttvs()]
-        self.cttv_combo['values'] = cttv_list
 
-    def load_phong_ban_dropdown(self):
-        phong_ban_list = [p[0] for p in db_manager.get_phong_bans()]
-        self.phong_gq_combo['values'] = phong_ban_list
 
     def update_can_bo_dropdown(self, event=None):
         phong_ban_name = self.phong_gq_combo.get()
@@ -292,17 +348,7 @@ class EditGYCTTFrame(ttkbootstrap.Frame):
             self.can_bo_gq_combo['values'] = []
             self.can_bo_gq_combo.set('')
 
-    def load_loai_benh_dropdown(self):
-        loai_benh_list = [lb[0] for lb in db_manager.get_loai_benhs()]
-        self.loai_benh_combo['values'] = loai_benh_list
 
-    def load_tinh_trang_dropdown(self):
-        tinh_trang_list = [tt[0] for tt in db_manager.get_tinh_trang_ho_so()]
-        self.tinh_trang_combo['values'] = tinh_trang_list
-
-    def load_ban_dropdown(self):
-        ban_list = [b[0] for b in db_manager.get_ban_cap_dons()]
-        self.ban_combo['values'] = ban_list
 
     def update_san_pham_dropdown(self, event=None):
         ban_name = self.ban_combo.get()

@@ -1,14 +1,25 @@
+import sys
+import asyncio
+
+# Fix for asyncio on Windows in a background thread
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox, Toplevel
-import sqlite3
 import requests
 import webbrowser
 import json
+from database import database_manager as db_manager
 from packaging.version import parse as parse_version
+from dotenv import load_dotenv
+from app_version import __version__ as CURRENT_VERSION
 from chuc_nang_chinh.main_panel import MainPanel
 
-CURRENT_VERSION = "0.1.1"
+# Tải biến môi trường từ file .env ngay từ đầu
+load_dotenv()
+
 UPDATE_URL = "https://raw.githubusercontent.com/HauNguyen1301/NhaplieuNgoaiBVC/main/updates/latest.json"
 DOWNLOAD_URL = "https://1drv.ms/f/c/5f21643f394cb276/EuvWU7JTZh9KjZxseBBRzrwBIIVDEryylRAb1rwBEU7hGQ?e=SaEX78"
 
@@ -52,24 +63,32 @@ class LoginPanel(ttk.Frame):
             messagebox.showerror("Đăng nhập thất bại", "Tên đăng nhập hoặc mật khẩu không đúng.")
 
     def check_credentials(self, username, password):
-        conn = sqlite3.connect('database/boithuong.db')
-        cursor = conn.cursor()
-        cursor.execute("""
+        sql = """
             SELECT u.UserID, u.Username, u.PasswordHash, u.Role, u.NhanVienID, nv.HoTen, nv.HR_PhongBan
             FROM User u
             JOIN NhanVien nv ON u.NhanVienID = nv.NhanVienID
             WHERE u.Username = ? AND u.PasswordHash = ?
-        """, (username, password))
-        user = cursor.fetchone()
-        conn.close()
-        return user
+        """
+        try:
+            user = db_manager.fetch_one(sql, (username, password))
+            return user
+        except Exception as e:
+            messagebox.showerror("Lỗi kết nối", f"Không thể kết nối đến cơ sở dữ liệu: {e}")
+            return None
 
 class App(ttk.Window):
     def __init__(self):
         super().__init__(themename="litera")
         self.title("Chương trình Nhập liệu Bồi thường Ngoài BVC" + CURRENT_VERSION)
         self.geometry("1200x800")
+        try:
+            # Set an empty icon to prevent the default icon error
+            self.iconphoto(False, ttk.PhotoImage())
+        except Exception:
+            # Fallback for environments where icon setting might fail
+            pass
         self.current_user = None
+        self.login_panel = None # Add this to hold the login panel instance
         self.show_login_screen()
 
     def clear_window(self):
@@ -84,11 +103,14 @@ class App(ttk.Window):
         center_frame = ttk.Frame(self)
         center_frame.pack(fill="both", expand=True)
         
-        login_panel = LoginPanel(center_frame, self.handle_login_success)
-        login_panel.place(relx=0.5, rely=0.5, anchor='center', width=300)
+        self.login_panel = LoginPanel(center_frame, self.handle_login_success)
+        self.login_panel.place(relx=0.5, rely=0.5, anchor='center', width=300)
 
     def handle_login_success(self, user_info):
         self.current_user = user_info
+        # Unbind the event from the top-level window to prevent re-triggering
+        self.unbind('<Return>')
+        self.login_panel = None # Clear the reference
         self.show_main_screen()
         self.check_for_updates()
 
@@ -114,9 +136,19 @@ class App(ttk.Window):
                 self.show_update_popup(latest_version)
 
         except requests.RequestException as e:
-            print(f"Could not check for updates: {e}")
+            # Hiển thị thông báo lỗi thân thiện với người dùng
+            messagebox.showerror(
+                "Lỗi kiểm tra cập nhật",
+                f"Không thể kiểm tra phiên bản mới. Vui lòng kiểm tra lại kết nối mạng của bạn.\n\nChi tiết lỗi: {e}",
+                parent=self
+            )
         except Exception as e:
-            print(f"An error occurred during update check: {e}")
+            # Bắt các lỗi không mong muốn khác
+            messagebox.showerror(
+                "Lỗi không xác định",
+                f"Đã xảy ra một lỗi không mong muốn trong quá trình kiểm tra cập nhật:\n\n{e}",
+                parent=self
+            )
 
     def show_update_popup(self, new_version):
         popup = Toplevel(self)

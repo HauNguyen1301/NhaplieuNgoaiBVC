@@ -4,7 +4,9 @@ from ttkbootstrap.dialogs import Messagebox
 from ttkbootstrap.scrolled import ScrolledText
 from database import database_manager as db_manager
 import datetime
+import threading
 from tkinter import TclError
+
 
 class LapToTrinhFrame(ttk.Frame):
     def __init__(self, parent, hs_id, parent_app, on_save_callback=None):
@@ -13,10 +15,12 @@ class LapToTrinhFrame(ttk.Frame):
         self.parent_app = parent_app
         self.on_save_callback = on_save_callback
         self.create_widgets()
-        self.load_data()
+        self.show_loading_indicator()
+        threading.Thread(target=self._load_data_in_background, daemon=True).start()
 
     def create_widgets(self):
-        form_frame = ttk.Frame(self)
+        content_frame = self
+        form_frame = ttk.Frame(content_frame)
         form_frame.pack(fill='x', padx=20, pady=10)
 
         # Configure DateEntry with dd/mm/yyyy format
@@ -50,38 +54,52 @@ class LapToTrinhFrame(ttk.Frame):
 
         form_frame.grid_columnconfigure(1, weight=1)
 
-        save_button = ttk.Button(self, text="Lưu tờ trình", command=self.save_to_trinh, bootstyle="success")
-        save_button.pack(pady=20)
+        self.save_button = ttk.Button(content_frame, text="Lưu tờ trình", command=self.save_to_trinh, bootstyle="success")
+        self.save_button.pack(pady=20)
+        self.save_button.config(state="disabled") # Disable until data is loaded
 
-    def load_data(self):
-        # Load NguoiDuyet combobox
-        self.nhan_vien_list = db_manager.get_all_nhan_vien()
-        self.entries["Người duyệt"]['values'] = [nv[1] for nv in self.nhan_vien_list]
+    def show_loading_indicator(self):
+        self.loading_label = ttk.Label(self, text="Đang tải dữ liệu tờ trình...", font=("Helvetica", 12))
+        self.loading_label.pack(pady=50)
 
-        # Load TinhTrang combobox
-        self.tinh_trang_list = db_manager.get_all_tinh_trang()
-        self.entries["Tình trạng hồ sơ"]['values'] = [tt[1] for tt in self.tinh_trang_list]
+    def _load_data_in_background(self):
+        try:
+            self._nhan_vien_list = db_manager.get_all_nhan_vien()
+            self._tinh_trang_list = db_manager.get_all_tinh_trang()
+            # Use the specific function for this frame
+            self._ho_so_data = db_manager.get_ho_so_for_to_trinh(self.hs_id)
+            self.after(0, self._populate_ui)
+        except Exception as e:
+            self.after(0, lambda: Messagebox.show_error(f"Lỗi tải dữ liệu: {e}", "Lỗi"))
 
-        # Load existing HoSo data
-        ho_so_data = db_manager.get_ho_so_by_id(self.hs_id)
-        if ho_so_data:
-            ngay_boi_thuong = ho_so_data[19]
-            hau_qua = ho_so_data[20]
-            giai_quyet = ho_so_data[21]
-            so_tien_boi_thuong = ho_so_data[9]
-            tinh_trang_id = ho_so_data[10]
-            nguoi_duyet_id = ho_so_data[22]
+    def _populate_ui(self):
+        if not self.winfo_exists():
+            return
 
-            if ngay_boi_thuong:
-                # DateEntry uses a different way to set date
+        self.loading_label.destroy()
+        self.save_button.config(state="normal")
+
+        # Load dropdowns regardless of ho_so_data
+        self.entries["Người duyệt"]['values'] = [nv[1] for nv in self._nhan_vien_list]
+        self.entries["Tình trạng hồ sơ"]['values'] = [tt[1] for tt in self._tinh_trang_list]
+
+        if not self._ho_so_data or not self._ho_so_data[0]:
+            # No specific record data, but UI is ready
+            return
+
+        # Unpack data with correct indices from get_ho_so_for_to_trinh
+        record = self._ho_so_data[0]
+        if record:
+            so_tien_boi_thuong, tinh_trang_id, ngay_boi_thuong_str, hau_qua, giai_quyet, nguoi_duyet_id = record
+
+            if ngay_boi_thuong_str:
                 try:
-                    # Assuming date from DB is dd/mm/yyyy
-                    date_obj = datetime.datetime.strptime(ngay_boi_thuong, '%d/%m/%Y').date()
-                    self.entries["Ngày bồi thường"].configure(startdate=date_obj)
-                except (ValueError, TypeError):
-                    # Fallback for different formats or None
+                    date_obj = datetime.datetime.strptime(ngay_boi_thuong_str, '%Y-%m-%d').date()
                     self.entries["Ngày bồi thường"].entry.delete(0, 'end')
-                    self.entries["Ngày bồi thường"].entry.insert(0, ngay_boi_thuong or "")
+                    self.entries["Ngày bồi thường"].entry.insert(0, date_obj.strftime('%d/%m/%Y'))
+                except (ValueError, TypeError):
+                    self.entries["Ngày bồi thường"].entry.delete(0, 'end')
+                    self.entries["Ngày bồi thường"].entry.insert(0, ngay_boi_thuong_str or "")
 
             self.entries["Hậu quả"].delete('1.0', 'end')
             self.entries["Hậu quả"].insert('1.0', hau_qua if hau_qua else "")
@@ -89,26 +107,19 @@ class LapToTrinhFrame(ttk.Frame):
             self.entries["Giải quyết"].delete('1.0', 'end')
             self.entries["Giải quyết"].insert('1.0', giai_quyet if giai_quyet else "")
 
-            # Format and insert currency
             so_tien_entry = self.entries["Số tiền bồi thường"]
             so_tien_entry.delete(0, 'end')
             if so_tien_boi_thuong is not None:
-                try:
-                    formatted_value = f"{float(so_tien_boi_thuong):,.0f}"
-                    so_tien_entry.insert(0, formatted_value)
-                except (ValueError, TypeError):
-                    so_tien_entry.insert(0, so_tien_boi_thuong)
+                so_tien_entry.insert(0, f"{float(so_tien_boi_thuong):,.0f}")
             
-            # Set TinhTrang combobox
             if tinh_trang_id is not None:
-                for i, tt in enumerate(self.tinh_trang_list):
+                for i, tt in enumerate(self._tinh_trang_list):
                     if tt[0] == tinh_trang_id:
                         self.entries["Tình trạng hồ sơ"].current(i)
                         break
             
-            # Set NguoiDuyet combobox
             if nguoi_duyet_id is not None:
-                for i, nv in enumerate(self.nhan_vien_list):
+                for i, nv in enumerate(self._nhan_vien_list):
                     if nv[0] == nguoi_duyet_id:
                         self.entries["Người duyệt"].current(i)
                         break
@@ -125,11 +136,11 @@ class LapToTrinhFrame(ttk.Frame):
 
             # Get NguoiDuyet ID
             selected_nv_index = self.entries["Người duyệt"].current()
-            nguoi_duyet_id = self.nhan_vien_list[selected_nv_index][0] if selected_nv_index != -1 else None
+            nguoi_duyet_id = self._nhan_vien_list[selected_nv_index][0] if selected_nv_index != -1 else None
 
             # Get TinhTrang ID
             selected_tt_index = self.entries["Tình trạng hồ sơ"].current()
-            tinh_trang_id = self.tinh_trang_list[selected_tt_index][0] if selected_tt_index != -1 else None
+            tinh_trang_id = self._tinh_trang_list[selected_tt_index][0] if selected_tt_index != -1 else None
 
             # Lấy NhanVienID từ tuple current_user (index 4)
             can_bo_id = self.parent_app.current_user[4]

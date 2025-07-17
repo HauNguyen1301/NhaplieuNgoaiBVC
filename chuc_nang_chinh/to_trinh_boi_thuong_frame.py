@@ -4,6 +4,7 @@ from database import database_manager as db_manager
 from .edit_gyctt_frame import EditGYCTTFrame
 from .lap_to_trinh_frame import LapToTrinhFrame
 
+
 class ToTrinhBoiThuongFrame(ttk.Frame):
     def __init__(self, parent, parent_app):
         super().__init__(parent)
@@ -12,15 +13,17 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
+        content_frame = self
+
         # --- Khung trên --- 
-        frame_top_left = ttk.LabelFrame(self, text="Tìm kiếm", padding=10)
+        frame_top_left = ttk.LabelFrame(content_frame, text="Tìm kiếm", padding=10)
         frame_top_left.place(relx=0, rely=0, relwidth=0.35, relheight=0.25)
 
-        frame_top_right = ttk.LabelFrame(self, text="Kết quả tìm kiếm", padding=10)
+        frame_top_right = ttk.LabelFrame(content_frame, text="Kết quả tìm kiếm", padding=10)
         frame_top_right.place(relx=0.35, rely=0, relwidth=0.65, relheight=0.25)
 
         # --- Khung dưới ---
-        frame_bottom = ttk.LabelFrame(self, text="Nội dung tờ trình", padding=10)
+        frame_bottom = ttk.LabelFrame(content_frame, text="Nội dung tờ trình", padding=10)
         frame_bottom.place(relx=0, rely=0.25, relwidth=1.0, relheight=0.75)
 
         # --- Widgets trong frame Tìm kiếm (top_left) ---
@@ -45,6 +48,9 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
 
         search_button = ttk.Button(parent_frame, text="Tìm kiếm", command=self.perform_search, bootstyle="info")
         search_button.grid(row=2, column=1, padx=5, pady=10, sticky='e')
+
+        self.so_ho_so_entry.bind('<Return>', lambda event: self.perform_search())
+        self.ten_ndbh_entry.bind('<Return>', lambda event: self.perform_search())
 
     def setup_results_treeview(self, parent_frame):
         parent_frame.pack_propagate(False) # Ngăn frame co lại
@@ -90,7 +96,8 @@ class ToTrinhBoiThuongFrame(ttk.Frame):
             Messagebox.show_info("Không tìm thấy", "Không tìm thấy hồ sơ nào phù hợp.")
         else:
             for row in results:
-                self.tree.insert('', 'end', values=row)
+                # Ensure row is a flat tuple/list for the values parameter
+                self.tree.insert('', 'end', values=(row[0], row[1], row[2], row[3], row[4]))
 
         # Reset selection state after search
         self.selected_hs_id = None

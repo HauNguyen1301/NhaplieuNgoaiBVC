@@ -11,6 +11,11 @@ class UserManagementWindow(ttk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
+        try:
+            self.iconphoto(False, ttk.PhotoImage())
+        except Exception:
+            pass
+
         self.create_widgets()
         self.load_users()
 

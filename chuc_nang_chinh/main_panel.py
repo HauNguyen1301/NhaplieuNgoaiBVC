@@ -65,6 +65,15 @@ class MainPanel(ttk.Frame):
             quan_ly_tab = QuanLySoLieuFrame(notebook)
             notebook.add(quan_ly_tab, text="Quản lý số liệu")
 
+        # Add signature label at the bottom
+        signature_label = ttk.Label(
+            self,
+            text="Designed by HauNguyen",
+            font=("Helvetica", 8),
+            foreground="gray"
+        )
+        signature_label.pack(side="bottom", anchor="se", padx=5, pady=5)
+
 
     def open_change_password_window(self):
         # The user_id is the first element in the user_info tuple

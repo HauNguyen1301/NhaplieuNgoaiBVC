@@ -86,6 +86,8 @@ CREATE INDEX idx_ngay_nhan_hs ON HoSoBoiThuong (NgayNhanHoSo);
 CREATE INDEX idx_ngay_boi_thuong ON HoSoBoiThuong (NgayBoiThuong);
 CREATE INDEX idx_can_bo_bt ON HoSoBoiThuong (CanBoBoiThuongID);
 
+
+
 -- Bảng User để quản lý đăng nhập
 CREATE TABLE User (
     UserID INTEGER PRIMARY KEY,

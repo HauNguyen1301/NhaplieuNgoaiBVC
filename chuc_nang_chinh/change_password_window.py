@@ -1,7 +1,7 @@
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
-import sqlite3
+from database import database_manager as db_manager
 
 class ChangePasswordWindow(ttk.Toplevel):
     def __init__(self, parent, user_id):
@@ -10,6 +10,11 @@ class ChangePasswordWindow(ttk.Toplevel):
         self.geometry("400x200")
         self.transient(parent) # Keep this window on top of the parent
         self.grab_set() # Modal behavior
+
+        try:
+            self.iconphoto(False, ttk.PhotoImage())
+        except Exception:
+            pass
 
         self.create_widgets()
 
@@ -56,27 +61,22 @@ class ChangePasswordWindow(ttk.Toplevel):
         if new_password != confirm_password:
             messagebox.showerror("Lỗi", "Mật khẩu mới không khớp.", parent=self)
             return
-        
-        conn = sqlite3.connect('boithuong.db')
-        cursor = conn.cursor()
 
-        # Verify old password
-        cursor.execute("SELECT PasswordHash FROM User WHERE UserID = ?", (self.user_id,))
-        result = cursor.fetchone()
+        # Verify old password using the database manager
+        user_record = db_manager.fetch_one("SELECT PasswordHash FROM User WHERE UserID = ?", (self.user_id,))
 
-        if not result or result[0] != old_password:
+        if not user_record or user_record[0] != old_password:
             messagebox.showerror("Lỗi", "Mật khẩu cũ không đúng.", parent=self)
-            conn.close()
             return
 
-        # Update to new password
-        try:
-            cursor.execute("UPDATE User SET PasswordHash = ? WHERE UserID = ?", (new_password, self.user_id))
-            conn.commit()
+        # Update to new password using the database manager
+        success = db_manager.execute_query(
+            "UPDATE User SET PasswordHash = ? WHERE UserID = ?",
+            (new_password, self.user_id)
+        )
+
+        if success:
             messagebox.showinfo("Thành công", "Đổi mật khẩu thành công.", parent=self)
             self.destroy()
-        except Exception as e:
-            conn.rollback()
-            messagebox.showerror("Lỗi cơ sở dữ liệu", f"Không thể cập nhật mật khẩu: {e}", parent=self)
-        finally:
-            conn.close()
+        else:
+            messagebox.showerror("Lỗi cơ sở dữ liệu", "Không thể cập nhật mật khẩu.", parent=self)
